@@ -1,4 +1,4 @@
-- name: "github_mcp_servers_api"
+- name: "modelcontextprotocol_github"
   url: "https://api.github.com/repos/modelcontextprotocol/servers/contents/src"
   parser: "github_api_parser"
   headers:
@@ -15,3 +15,19 @@
     retry_delay: 5
     rate_limit_wait: 60
   content_selector: ".repository-content .Box-row"
+
+- name: "smithery_registry"
+  url: "https://registry.smithery.ai/servers"
+  parser: "smithery_parser"
+  headers:
+    Accept: "application/json"
+  auth:
+    token: "${SMITHERY_API_KEY}"
+  pagination:
+    type: "query_param"
+    pattern: "page={num}&pageSize=100"
+    max_pages: 100
+  error_handling:
+    max_retries: 3
+    retry_delay: 5
+    rate_limit_wait: 60

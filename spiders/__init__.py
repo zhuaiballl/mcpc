@@ -26,10 +26,10 @@ class ParserRegistry:
 # 初始化注册表实例
 parser_registry = ParserRegistry()
 from .github_parser import GitHubParser  # 添加GitHub解析器导入
+from .github_api_parser import GitHubAPIParser
+from .smithery_parser import SmitheryParser
 
 # 注册默认解析器
 parser_registry.register("github_parser", GitHubParser)
-
-# 注册解析器
-from .github_api_parser import GitHubAPIParser
 parser_registry.register("github_api_parser", GitHubAPIParser)
+parser_registry.register("smithery_parser", SmitheryParser)
