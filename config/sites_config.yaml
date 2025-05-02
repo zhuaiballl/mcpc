@@ -1,0 +1,17 @@
+- name: "github_mcp_servers_api"
+  url: "https://api.github.com/repos/modelcontextprotocol/servers/contents/src"
+  parser: "github_api_parser"
+  headers:
+    Accept: "application/vnd.github.v3+json"
+    User-Agent: "MCPC-Crawler/1.0"
+  auth:
+    token: "${GITHUB_TOKEN}"
+  pagination:
+    type: "query_param"
+    pattern: "page={num}&per_page=100"
+    max_pages: 10
+  error_handling:
+    max_retries: 3
+    retry_delay: 5
+    rate_limit_wait: 60
+  content_selector: ".repository-content .Box-row"
