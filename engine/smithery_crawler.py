@@ -95,10 +95,17 @@ class SmitheryCrawler(DistributedCrawler):
         }
 
     async def crawl_site(self, site_config) -> AsyncIterator[Dict[str, Any]]:
-        """异步迭代器实现，用于分页获取数据"""
+        """异步迭代器实现，用于分页获取数据
+        Args:
+            site_config: 站点配置
+        Returns:
+            AsyncIterator[Dict[str, Any]]: 异步迭代器，每次迭代返回一页数据
+        """
         try:
             page_num = 1
             total_servers = 0
+            total_pages = None
+            
             while True:
                 print(f"正在抓取第 {page_num} 页...")
                 site_config['current_page'] = page_num
@@ -106,6 +113,11 @@ class SmitheryCrawler(DistributedCrawler):
                 if not data:
                     print("没有获取到数据，可能已达到最后一页")
                     break
+                
+                # 获取分页信息
+                if total_pages is None:
+                    total_pages = data.get('pagination', {}).get('totalPages', 1)
+                    print(f"总页数: {total_pages}")
                 
                 # 处理服务器数据
                 servers = data.get('servers', [])
@@ -118,8 +130,8 @@ class SmitheryCrawler(DistributedCrawler):
                 
                 yield data
                 
-                # 检查是否达到最大页数
-                if page_num >= site_config.get('pagination', {}).get('max_pages', 100):
+                # 检查是否达到最大页数或总页数
+                if page_num >= total_pages or page_num >= site_config.get('pagination', {}).get('max_pages', 100):
                     print(f"已达到最大页数 {page_num}，停止抓取")
                     break
                     
