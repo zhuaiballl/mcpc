@@ -213,4 +213,32 @@ class DistributedCrawler:
         """记录重复目录的信息"""
         self.logger.warning(f"发现重复目录: 原始路径={path}, 规范化路径={normalized_path}")
         self.logger.info(f"已处理的目录: {sorted(self.processed_dirs)}")
-        self.logger.info(f"目录关系: {json.dumps(self.dir_parents, indent=2)}") 
+        self.logger.info(f"目录关系: {json.dumps(self.dir_parents, indent=2)}")
+    
+    async def run(self):
+        """运行爬虫的主方法"""
+        try:
+            # 确保配置存在
+            if not self.configs:
+                raise ValueError("No configuration found")
+            
+            # 获取第一个配置（modelcontextprotocol的配置）
+            site_config = self.configs[0]
+            
+            # 创建结果列表
+            results = []
+            
+            # 使用异步迭代器处理数据
+            async for result in self.crawl_site(site_config):
+                print(f"已抓取到 {len(result)} 条modelcontextprotocol服务器数据")
+                results.extend(result)
+            
+            # 保存所有服务器的元数据
+            metadata_path = self.base_dir / "modelcontextprotocol" / "all_servers.modelcontextprotocol.io.json"
+            with open(metadata_path, 'w') as f:
+                json.dump(results, f, indent=2)
+            print(f"modelcontextprotocol数据已保存至 {os.path.abspath(metadata_path)}")
+            
+        except Exception as e:
+            print(f"运行爬虫时发生错误: {str(e)}")
+            raise 
