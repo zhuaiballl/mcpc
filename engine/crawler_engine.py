@@ -4,13 +4,15 @@ import asyncio
 from pathlib import Path
 from .distributed_crawler import DistributedCrawler
 from .smithery_crawler import SmitheryCrawler
+from .pulse_crawler import PulseCrawler
+from .cursor_crawler import CursorCrawler
 import argparse
 import yaml
 
 def main():
     parser = argparse.ArgumentParser(description='Crawler Engine')
     parser.add_argument('--config', type=str, required=True, help='Path to the configuration file')
-    parser.add_argument('--sources', type=str, nargs='+', help='List of data sources to crawl (e.g., smithery modelcontextprotocol)')
+    parser.add_argument('--sources', type=str, nargs='+', help='List of data sources to crawl (e.g., smithery modelcontextprotocol pulse)')
     args = parser.parse_args()
 
     # 加载配置
@@ -20,7 +22,9 @@ def main():
     # 获取所有可用的爬虫类
     crawler_classes = {
         'smithery': SmitheryCrawler,
-        'modelcontextprotocol': DistributedCrawler
+        'modelcontextprotocol': DistributedCrawler,
+        'pulse': PulseCrawler,
+        'cursor': CursorCrawler
     }
 
     # 如果没有指定数据源，则抓取所有数据源

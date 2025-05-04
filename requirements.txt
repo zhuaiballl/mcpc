@@ -1,3 +1,10 @@
-requests>=2.31.0
-requests-cache>=1.1.0
-PyYAML>=6.0.1 
+requests>=2.25.0
+requests_cache>=1.0.0
+selenium>=4.0.0
+beautifulsoup4>=4.9.0
+pyopenssl>=23.0.0
+cryptography>=41.0.0
+cffi>=1.12
+PyYAML>=5.4
+# aiohttp>=3.8.0  # 如果用到异步HTTP
+# requests-httpbearer  # 如果用到 Bearer 认证
