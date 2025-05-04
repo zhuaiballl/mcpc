@@ -7,6 +7,8 @@ from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from bs4 import BeautifulSoup
 import time
+import re
+from urllib.parse import urlparse
 
 class CursorCrawler:
     def __init__(self, config_path):
@@ -53,6 +55,21 @@ class CursorCrawler:
             })
         return results
 
+    def extract_github_repo_info(self, url):
+        """
+        从 GitHub 链接中提取 owner 和 repo 名称
+        支持 repo 首页、tree、blob、子目录、文件等多种形式
+        """
+        parsed = urlparse(url)
+        if parsed.netloc != "github.com":
+            return None, None
+        m = re.match(r'^/([^/]+)/([^/]+)', parsed.path)
+        if m:
+            owner, repo = m.group(1), m.group(2)
+            repo = repo[:-4] if repo.endswith('.git') else repo
+            return owner, repo
+        return None, None
+
     def _get_github_repo_url(self, detail_url: str) -> str:
         try:
             resp = requests.get(detail_url, timeout=15)
@@ -60,6 +77,8 @@ class CursorCrawler:
             a = soup.select_one('body > div.min-h-screen.mt-24.px-4 > div:nth-child(1) > a')
             if a and a['href'].startswith('https://github.com/'):
                 return a['href']
+            elif a:
+                print(f"Installation Instructions 链接不是GitHub链接，已跳过: {a['href']}")
         except Exception as e:
             print(f"获取 {detail_url} 的 GitHub repo 链接失败: {e}")
         return None
@@ -68,11 +87,10 @@ class CursorCrawler:
         if not self.github_token:
             print("未设置 GITHUB_TOKEN，无法抓取 GitHub repo")
             return
-        parts = repo_url.rstrip('/').split('/')
-        if len(parts) < 2:
-            print(f"repo_url 格式不正确: {repo_url}")
+        owner, repo = self.extract_github_repo_info(repo_url)
+        if not owner or not repo:
+            print(f"链接不是有效的GitHub仓库链接，已跳过: {repo_url}")
             return
-        owner, repo = parts[-2], parts[-1]
         api_url = f'https://api.github.com/repos/{owner}/{repo}/contents'
         headers = {'Authorization': f'token {self.github_token}'}
         def download_dir(api_url, local_dir):
