@@ -10,6 +10,11 @@ import time
 import re
 from urllib.parse import urlparse
 
+proxies = {
+    "http": "socks5h://127.0.0.1:1060",
+    "https": "socks5h://127.0.0.1:1060"
+}
+
 class CursorCrawler:
     def __init__(self, config_path):
         self.base_dir = Path("mcp_servers")
@@ -94,14 +99,14 @@ class CursorCrawler:
         api_url = f'https://api.github.com/repos/{owner}/{repo}/contents'
         headers = {'Authorization': f'token {self.github_token}'}
         def download_dir(api_url, local_dir):
-            resp = requests.get(api_url, headers=headers, timeout=30)
+            resp = requests.get(api_url, headers=headers, timeout=30, proxies=proxies)
             if resp.status_code == 404:
                 print(f"repo 404: {api_url}")
                 return
             resp.raise_for_status()
             for item in resp.json():
                 if item['type'] == 'file':
-                    file_resp = requests.get(item['download_url'], headers=headers, timeout=30)
+                    file_resp = requests.get(item['download_url'], headers=headers, timeout=30, proxies=proxies)
                     file_resp.raise_for_status()
                     file_path = os.path.join(local_dir, item['name'])
                     with open(file_path, 'wb') as f:

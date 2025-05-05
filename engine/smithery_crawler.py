@@ -4,6 +4,7 @@ import os
 import json
 from typing import Dict, Any, AsyncIterator
 from pathlib import Path
+import requests
 
 class SmitheryCrawler(DistributedCrawler):
     def __init__(self, config_path):
@@ -28,6 +29,11 @@ class SmitheryCrawler(DistributedCrawler):
         Returns:
             API响应数据
         """
+        proxies = {
+            "http": "socks5h://127.0.0.1:1060",
+            "https": "socks5h://127.0.0.1:1060"
+        }
+        
         headers = {
             'Authorization': f'Bearer {self.api_key}',
             'Accept': 'application/json'

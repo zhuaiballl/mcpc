@@ -5,6 +5,7 @@ from pathlib import Path
 from requests_cache import CachedSession
 from spiders import parser_registry
 from .exceptions import CrawlExhausted
+import requests
 
 class DistributedCrawler:
     def __init__(self, config_path):
@@ -150,34 +151,41 @@ class DistributedCrawler:
                 else:
                     raise
     
+    proxies = {
+        "http": "socks5h://127.0.0.1:1060",
+        "https": "socks5h://127.0.0.1:1060"
+    }
+    
     async def _fetch_page(self, site_config):
         try:
             headers = site_config.get('headers', {}).copy()
             auth_token = os.getenv(site_config['auth']['token'])
             if auth_token:
                 headers['Authorization'] = f'Bearer {auth_token}'
-            
-            response = self.session.get(
-                site_config['url'],
-                headers=headers
-            )
-            
+            # 判断是否为GitHub API请求
+            url = site_config['url']
+            if url.startswith('https://api.github.com/'):
+                response = self.session.get(
+                    url,
+                    headers=headers,
+                    proxies=proxies
+                )
+            else:
+                response = self.session.get(
+                    url,
+                    headers=headers
+                )
             print(f"API响应状态码: {response.status_code}")
             print(f"API响应内容: {response.text[:200]}...")
-            
             if response.status_code == 403:
                 print("可能遇到GitHub API速率限制，请检查GitHub Token是否正确设置")
                 raise CrawlExhausted("GitHub API速率限制")
-            
             response.raise_for_status()
-            
             data = response.json()
             if not data:
                 print("API返回空数据")
                 return None
-            
             return data
-            
         except Exception as e:
             raise CrawlExhausted(f"抓取失败: {str(e)}")
     

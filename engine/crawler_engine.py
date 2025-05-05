@@ -5,7 +5,9 @@ from pathlib import Path
 from .distributed_crawler import DistributedCrawler
 from .smithery_crawler import SmitheryCrawler
 from .pulse_crawler import PulseCrawler
+from .awesome_mcp_crawler import AwesomeMcpCrawler
 from .cursor_crawler import CursorCrawler
+
 import argparse
 import yaml
 
@@ -24,7 +26,8 @@ def main():
         'smithery': SmitheryCrawler,
         'modelcontextprotocol': DistributedCrawler,
         'pulse': PulseCrawler,
-        'cursor': CursorCrawler
+        'cursor': CursorCrawler,
+        'awesome': AwesomeMcpCrawler
     }
 
     # 如果没有指定数据源，则抓取所有数据源
