@@ -7,6 +7,7 @@ from .smithery_crawler import SmitheryCrawler
 from .pulse_crawler import PulseCrawler
 from .awesome_mcp_crawler import AwesomeMcpCrawler
 from .cursor_crawler import CursorCrawler
+from .glama_crawler import GlamaCrawler
 
 import argparse
 import yaml
@@ -27,7 +28,8 @@ def main():
         'modelcontextprotocol': DistributedCrawler,
         'pulse': PulseCrawler,
         'cursor': CursorCrawler,
-        'awesome': AwesomeMcpCrawler
+        'awesome': AwesomeMcpCrawler,
+        'glama': GlamaCrawler
     }
 
     # 如果没有指定数据源，则抓取所有数据源
