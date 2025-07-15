@@ -67,7 +67,9 @@ The project uses `config/sites_config.yaml` for configuration, including:
 
 ## Usage
 
-Run the crawler:
+### 第一步：抓取元数据
+
+Run the crawler to collect metadata:
 ```bash
 python -m engine.crawler_engine --config config/sites_config.yaml
 ```
@@ -77,13 +79,101 @@ To crawl specific data sources:
 python -m engine.crawler_engine --config config/sites_config.yaml --sources glama smithery
 ```
 
+To crawl only servers or clients:
+```bash
+# 只抓取servers
+python -m engine.crawler_engine --config config/sites_config.yaml --type servers
+
+# 只抓取clients
+python -m engine.crawler_engine --config config/sites_config.yaml --type clients
+```
+
+### 第二步：下载源码（可选）
+
+#### 方式1：抓取元数据后立即下载源码
+```bash
+python -m engine.crawler_engine --config config/sites_config.yaml --download-sources
+```
+
+#### 方式2：单独下载源码
+```bash
+# 下载所有数据源的源码
+python -m engine.crawler_engine --config config/sites_config.yaml --download-only
+
+# 下载特定数据源的源码
+python -m engine.crawler_engine --config config/sites_config.yaml --download-source smithery
+```
+
+#### 方式3：使用源码下载器
+```bash
+# 下载所有数据源的源码
+python -m engine.source_downloader --all
+
+# 下载特定数据源的源码
+python -m engine.source_downloader --source smithery
+```
+
 ## Output
 
 The crawler generates the following in the `mcp_servers` directory:
 
-- Server source code files
-- Server metadata files (.json)
+- Server metadata files (.json) - one file per data source
+- Server source code files (optional, downloaded in step 2)
 - Crawler logs (crawler.log)
+
+### Output Directory Structure
+
+```
+mcp_servers/
+├── smithery/
+│   ├── smithery.json  # All smithery servers metadata
+│   ├── server_name_1/  # Server source code (step 2)
+│   │   ├── README.md
+│   │   ├── requirements.txt
+│   │   └── ...
+│   └── server_name_2/  # Server source code (step 2)
+│       ├── main.py
+│       └── ...
+├── modelcontextprotocol/
+│   ├── modelcontextprotocol.json  # All GitHub API servers metadata
+│   └── server_name_3/  # Server source code (step 2)
+├── pulse/
+│   ├── pulse.json  # All pulse servers metadata
+│   └── server_name_4/  # Server source code (step 2)
+├── cursor/
+│   ├── cursor.json  # All cursor servers metadata
+│   └── server_name_5/  # Server source code (step 2)
+├── awesome/
+│   ├── awesome.json  # All awesome MCP servers metadata
+│   └── server_name_6/  # Server source code (step 2)
+├── glama/
+│   ├── glama.json  # All glama servers metadata
+│   └── server_name_7/  # Server source code (step 2)
+└── crawler.log
+```
+
+### Summary File Format
+
+Each data source generates a summary JSON file containing:
+
+```json
+{
+  "source": "smithery",
+  "total_count": 150,
+  "crawled_at": "2024-01-01T12:00:00Z",
+  "servers": [
+    {
+      "name": "Server Name",
+      "description": "Server description",
+      "url": "https://example.com",
+      "github_url": "https://github.com/example/server",
+      "source": "smithery",
+      "crawled_at": "2024-01-01T12:00:00Z"
+    }
+    // ... more servers
+  ]
+}
+```
 
 ## Notes
 
