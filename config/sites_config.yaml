@@ -31,3 +31,14 @@
     max_retries: 3
     retry_delay: 5
     rate_limit_wait: 60
+
+- name: "glama_clients"
+  url: "https://glama.ai/mcp/clients"
+  parser: "glama_client_parser"
+  headers:
+    Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+    User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  error_handling:
+    max_retries: 3
+    retry_delay: 5
+    rate_limit_wait: 60
