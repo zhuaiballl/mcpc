@@ -5,6 +5,7 @@ import json
 import re
 from urllib.parse import urlparse
 import os
+from datetime import datetime
 
 proxies = {
     "http": "socks5h://127.0.0.1:1060",
@@ -101,25 +102,32 @@ class AwesomeMcpCrawler:
         resp.raise_for_status()
         results = self._parse_list(resp.text)
         print(f"共抓取到 {len(results)} 条 awesome MCP 数据")
-        # 保存每个 server，并抓取GitHub repo
+        
+        # 处理每个server，获取GitHub repo信息
         for item in results:
-            normalized_name = item['name'].replace('/', '_').replace('@', '_').replace(' ', '_')
-            server_dir = self.output_dir / normalized_name
-            server_dir.mkdir(parents=True, exist_ok=True)
-            metadata_path = server_dir / f"{normalized_name}.awesome.json"
-            with open(metadata_path, 'w') as f:
-                json.dump(item, f, indent=2, ensure_ascii=False)
-            # 获取并抓取GitHub repo
+            # 获取并添加GitHub repo信息
             repo_url = self._get_github_repo_url(item['detail_url'])
             if repo_url:
-                self._download_github_repo(repo_url, server_dir)
+                item['github_url'] = repo_url
+                print(f"找到 {item['name']} 的 GitHub repo: {repo_url}")
             else:
+                item['github_url'] = ''
                 print(f"未找到 {item['name']} 的 GitHub repo 链接")
-        # 保存总表
-        all_path = self.output_dir / "all_servers.awesome.json"
-        with open(all_path, 'w') as f:
-            json.dump(results, f, indent=2, ensure_ascii=False)
-        print(f"awesome MCP 数据已保存至 {all_path.resolve()}")
+            
+            # 添加source和crawled_at字段
+            item['source'] = 'awesome'
+            item['crawled_at'] = datetime.now().isoformat()
+        
+        # 保存汇总文件
+        summary_path = self.output_dir / "awesome.json"
+        with open(summary_path, 'w') as f:
+            json.dump({
+                'source': 'awesome',
+                'total_count': len(results),
+                'crawled_at': datetime.now().isoformat(),
+                'servers': results
+            }, f, indent=2, ensure_ascii=False)
+        print(f"awesome MCP 数据已保存至 {summary_path.resolve()}")
 
     async def run(self):
         self.crawl() 

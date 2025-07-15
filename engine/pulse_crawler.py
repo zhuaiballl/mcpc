@@ -6,6 +6,7 @@ from typing import Dict, Any, AsyncIterator
 import requests
 import re
 from urllib.parse import urlparse
+from datetime import datetime
 
 proxies = {
     "http": "socks5h://127.0.0.1:1060",
@@ -109,6 +110,7 @@ class PulseCrawler(DistributedCrawler):
         try:
             offset = 0
             total_servers = 0
+            all_servers = []  # 收集所有服务器数据
             
             while True:
                 print(f"正在抓取偏移量 {offset}...")
@@ -130,11 +132,6 @@ class PulseCrawler(DistributedCrawler):
                 # 处理每个服务器的数据
                 for server in servers:
                     try:
-                        # 规范化路径
-                        normalized_path = self._normalize_path(server.get('name', 'unknown'))
-                        server_dir = self.output_dir / normalized_path
-                        server_dir.mkdir(parents=True, exist_ok=True)
-                        
                         # 保存服务器元数据
                         metadata = {
                             'name': server.get('name', ''),
@@ -147,18 +144,12 @@ class PulseCrawler(DistributedCrawler):
                             'package_name': server.get('package_name', ''),
                             'package_download_count': server.get('package_download_count', 0),
                             'ai_generated_description': server.get('EXPERIMENTAL_ai_generated_description', ''),
-                            'source': 'pulse'
+                            'source': 'pulse',
+                            'crawled_at': datetime.now().isoformat()
                         }
                         
-                        metadata_path = server_dir / f"{normalized_path}.pulse.json"
-                        with open(metadata_path, 'w') as f:
-                            json.dump(metadata, f, indent=2)
-                        print(f"已保存服务器元数据: {metadata_path}")
-                        
-                        # 如果source_code_url是GitHub链接，抓取repo
-                        repo_url = server.get('source_code_url', '')
-                        if repo_url and repo_url.startswith('https://github.com/'):
-                            self._download_github_repo(repo_url, server_dir)
+                        all_servers.append(metadata)
+                        print(f"已收集服务器元数据: {server.get('name', 'unknown')}")
                         
                     except Exception as e:
                         print(f"处理服务器 {server.get('name', 'unknown')} 时发生错误: {str(e)}")
@@ -176,6 +167,17 @@ class PulseCrawler(DistributedCrawler):
                 site_config['next_url'] = next_url
                 
                 offset += len(servers)
+            
+            # 保存所有服务器的汇总信息
+            summary_path = self.output_dir / "pulse.json"
+            with open(summary_path, 'w') as f:
+                json.dump({
+                    'source': 'pulse',
+                    'total_count': len(all_servers),
+                    'crawled_at': datetime.now().isoformat(),
+                    'servers': all_servers
+                }, f, indent=2)
+            print(f"已保存所有服务器汇总信息: {summary_path}")
                 
         except Exception as e:
             print(f"抓取过程中发生错误: {str(e)}")
@@ -191,19 +193,11 @@ class PulseCrawler(DistributedCrawler):
             # 获取第一个配置（pulse的配置）
             site_config = self.configs[0]
             
-            # 创建结果列表
-            results = []
-            
             # 使用异步迭代器处理数据
             async for result in self.crawl_site(site_config):
                 print(f"已抓取到 {len(result.get('servers', []))} 条pulse服务器数据")
-                results.extend(result.get('servers', []))
             
-            # 保存所有服务器的元数据
-            metadata_path = self.base_dir / "pulse" / "all_servers.pulse.json"
-            with open(metadata_path, 'w') as f:
-                json.dump(results, f, indent=2)
-            print(f"pulse数据已保存至 {os.path.abspath(metadata_path)}")
+            print("pulse数据抓取完成")
             
         except Exception as e:
             print(f"运行爬虫时发生错误: {str(e)}")

@@ -14,6 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import time
 import requests_cache
 import random
+from datetime import datetime
 
 # GitHub API proxy settings
 github_proxies = {
@@ -293,28 +294,33 @@ class GlamaCrawler:
             results = self._parse_list(html)
             print(f"共抓取到 {len(results)} 条 Glama MCP 数据")
 
-            # 保存每个 server，并抓取GitHub repo
+            # 处理每个server，获取GitHub repo信息
             for item in results:
-                normalized_name = item['name'].replace('/', '_').replace('@', '_').replace(' ', '_')
-                server_dir = self.output_dir / normalized_name
-                server_dir.mkdir(parents=True, exist_ok=True)
-                metadata_path = server_dir / f"{normalized_name}.glama.json"
-                with open(metadata_path, 'w') as f:
-                    json.dump(item, f, indent=2, ensure_ascii=False)
-                
-                # 获取并抓取GitHub repo
+                # 获取并添加GitHub repo信息
                 repo_url = self._get_github_repo_url(item['detail_url'])
                 if repo_url:
-                    self._download_github_repo(repo_url, server_dir)
+                    item['github_url'] = repo_url
+                    print(f"找到 {item['name']} 的 GitHub repo: {repo_url}")
                 else:
+                    item['github_url'] = ''
                     print(f"未找到 {item['name']} 的 GitHub repo 链接")
+                
+                # 添加source和crawled_at字段
+                item['source'] = 'glama'
+                item['crawled_at'] = datetime.now().isoformat()
+                
                 self._random_sleep(2, 4)  # 在请求之间添加随机延迟
 
-            # 保存总表
-            all_path = self.output_dir / "all_servers.glama.json"
-            with open(all_path, 'w') as f:
-                json.dump(results, f, indent=2, ensure_ascii=False)
-            print(f"Glama MCP 数据已保存至 {all_path.resolve()}")
+            # 保存汇总文件
+            summary_path = self.output_dir / "glama.json"
+            with open(summary_path, 'w') as f:
+                json.dump({
+                    'source': 'glama',
+                    'total_count': len(results),
+                    'crawled_at': datetime.now().isoformat(),
+                    'servers': results
+                }, f, indent=2, ensure_ascii=False)
+            print(f"Glama MCP 数据已保存至 {summary_path.resolve()}")
         finally:
             driver.quit()
 

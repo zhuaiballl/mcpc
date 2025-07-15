@@ -6,6 +6,7 @@ from requests_cache import CachedSession
 from spiders import parser_registry
 from .exceptions import CrawlExhausted
 import requests
+from datetime import datetime
 
 class DistributedCrawler:
     def __init__(self, config_path):
@@ -50,6 +51,8 @@ class DistributedCrawler:
                 self.session.headers.update(auth)
             
             page_num = 1
+            all_servers = []  # 收集所有服务器数据
+            
             while True:
                 print(f"正在抓取第 {page_num} 页...")
                 data = await self._fetch_page_with_retry(site_config)
@@ -66,10 +69,6 @@ class DistributedCrawler:
                         
                     # 规范化路径
                     normalized_path = self._normalize_path(path)
-                        
-                    # 创建服务器目录
-                    server_dir = output_dir / normalized_path
-                    server_dir.mkdir(parents=True, exist_ok=True)
                     
                     # 保存服务器元数据
                     metadata = {
@@ -80,12 +79,10 @@ class DistributedCrawler:
                         'source': 'modelcontextprotocol'
                     }
                     
-                    metadata_path = server_dir / f"{item['name']}.json"
-                    with open(metadata_path, 'w') as f:
-                        json.dump(metadata, f, indent=2)
-                    print(f"已保存元数据: {metadata_path}")
+                    all_servers.append(metadata)
+                    print(f"已收集服务器元数据: {item['name']}")
                     
-                    # 获取服务器目录内容
+                    # 获取服务器目录内容（可选，如果需要源代码的话）
                     if 'url' in item:
                         try:
                             # 使用 _fetch_page_with_retry 获取目录内容
@@ -94,15 +91,17 @@ class DistributedCrawler:
                             dir_data = await self._fetch_page_with_retry(dir_config)
                             
                             if dir_data:
+                                # 将文件信息添加到元数据中
+                                files = []
                                 for file in dir_data:
                                     if file['type'] == 'file':
-                                        # 直接获取文件内容
-                                        file_response = self.session.get(file['download_url'])
-                                        if file_response.status_code == 200:
-                                            file_path = server_dir / file['name']
-                                            with open(file_path, 'w') as f:
-                                                f.write(file_response.text)
-                                            print(f"已保存文件: {file_path}")
+                                        files.append({
+                                            'name': file['name'],
+                                            'path': file['path'],
+                                            'size': file['size'],
+                                            'download_url': file['download_url']
+                                        })
+                                metadata['files'] = files
                         except Exception as e:
                             print(f"获取目录内容时发生错误: {str(e)}")
                             continue
@@ -114,6 +113,18 @@ class DistributedCrawler:
                     break
                     
                 page_num += 1
+            
+            # 保存所有服务器的汇总信息
+            source_name = site_config['name'].split('_')[0]
+            summary_path = output_dir / f"{source_name}.json"
+            with open(summary_path, 'w') as f:
+                json.dump({
+                    'source': source_name,
+                    'total_count': len(all_servers),
+                    'crawled_at': datetime.now().isoformat(),
+                    'servers': all_servers
+                }, f, indent=2)
+            print(f"已保存所有服务器汇总信息: {summary_path}")
                 
         except Exception as e:
             print(f"抓取过程中发生错误: {str(e)}")
@@ -233,19 +244,11 @@ class DistributedCrawler:
             # 获取第一个配置（modelcontextprotocol的配置）
             site_config = self.configs[0]
             
-            # 创建结果列表
-            results = []
-            
             # 使用异步迭代器处理数据
             async for result in self.crawl_site(site_config):
                 print(f"已抓取到 {len(result)} 条modelcontextprotocol服务器数据")
-                results.extend(result)
             
-            # 保存所有服务器的元数据
-            metadata_path = self.base_dir / "modelcontextprotocol" / "all_servers.modelcontextprotocol.io.json"
-            with open(metadata_path, 'w') as f:
-                json.dump(results, f, indent=2)
-            print(f"modelcontextprotocol数据已保存至 {os.path.abspath(metadata_path)}")
+            print("modelcontextprotocol数据抓取完成")
             
         except Exception as e:
             print(f"运行爬虫时发生错误: {str(e)}")
