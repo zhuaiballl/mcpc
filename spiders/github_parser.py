@@ -1,5 +1,5 @@
 from .base_parser import MCPParser  # 新增基类导入
-from . import parser_registry  # 新增导入注册表实例
+from bs4 import BeautifulSoup
 
 class GitHubParser(MCPParser):  # 现在可以正确继承
     def parse_server_list(self, html):
@@ -31,6 +31,3 @@ class GitHubParser(MCPParser):  # 现在可以正确继承
             'current_page': int(current_page.text) if current_page else 1,
             'total_pages': len(soup.select('.BtnGroup a')) or 1
         }
-
-# 将注册代码移到类定义之后
-parser_registry.register("github_parser", GitHubParser)
