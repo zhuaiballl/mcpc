@@ -67,7 +67,7 @@ The project uses `config/sites_config.yaml` for configuration, including:
 
 ## Usage
 
-### 第一步：抓取元数据
+### Step 1: Collect Metadata
 
 Run the crawler to collect metadata:
 ```bash
@@ -81,35 +81,35 @@ python -m engine.crawler_engine --config config/sites_config.yaml --sources glam
 
 To crawl only servers or clients:
 ```bash
-# 只抓取servers
+# Servers only
 python -m engine.crawler_engine --config config/sites_config.yaml --type servers
 
-# 只抓取clients
+# Clients only
 python -m engine.crawler_engine --config config/sites_config.yaml --type clients
 ```
 
-### 第二步：下载源码（可选）
+### Step 2: Download Source Code (Optional)
 
-#### 方式1：抓取元数据后立即下载源码
+#### Method 1: Download source code immediately after metadata collection
 ```bash
 python -m engine.crawler_engine --config config/sites_config.yaml --download-sources
 ```
 
-#### 方式2：单独下载源码
+#### Method 2: Download source code separately
 ```bash
-# 下载所有数据源的源码
+# All data sources
 python -m engine.crawler_engine --config config/sites_config.yaml --download-only
 
-# 下载特定数据源的源码
+# Specific data source
 python -m engine.crawler_engine --config config/sites_config.yaml --download-source smithery
 ```
 
-#### 方式3：使用源码下载器
+#### Method 3: Use source downloader directly
 ```bash
-# 下载所有数据源的源码
+# All data sources
 python -m engine.source_downloader --all
 
-# 下载特定数据源的源码
+# Specific data source
 python -m engine.source_downloader --source smithery
 ```
 
