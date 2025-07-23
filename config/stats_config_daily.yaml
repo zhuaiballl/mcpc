@@ -1,0 +1,80 @@
+# MCP服务器数量统计配置文件 - 每日爬取版本
+# 适用于Cloudflare保护的网站
+
+# 调度器配置
+scheduler:
+  interval_hours: 24  # 每24小时运行一次
+
+# 日志配置
+logging:
+  level: INFO
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+# 输出目录
+output_dir: "stats"
+
+# 网站配置列表
+sites:
+  - name: "mcp_market"
+    url: "https://mcpmarket.com/"
+    count_selector: "body > main > div > section > div > div > div.mb-1.md\\:mb-2 > div > div.flex.items-center.gap-2 > span > strong"
+    fallback_selectors:
+      - ".flex.items-center.gap-2 span strong"
+      - "span strong"
+      - "strong"
+    timeout: 30
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+  - name: "mcp_so"
+    url: "https://mcp.so/"
+    count_selector: "body > main > div > section.px-4.md\\:px-8.py-16 > div > div > a > div"
+    fallback_selectors:
+      - "section.px-4.md\\:px-8.py-16 a div"
+      - "a div"
+      - "div"
+    timeout: 45
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+    # Cloudflare保护，需要特殊处理
+    cloudflare_protected: true
+    # 更长的请求间隔
+    request_delay: 15
+    # 最大重试次数
+    max_retries: 2
+    # 添加Referer
+    referer: "https://www.google.com/"
+    # 更真实的User-Agent
+    user_agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+  - name: "pulse_mcp"
+    url: "https://www.pulsemcp.com/servers"
+    count_selector: "#mcp-servers-index > div.flex.flex-col.items-center.md\\:px-0 > div.mb-2 > div > span.text-14.font-bold.text-pulse-purple.hidden.md\\:block"
+    fallback_selectors:
+      - "span.text-14.font-bold.text-pulse-purple"
+      - ".text-pulse-purple"
+      - "span.font-bold"
+    timeout: 30
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+  - name: "smithery"
+    url: "https://smithery.ai/"
+    count_selector: "body > main > div.relative.px-4.sm\\:px-6.lg\\:px-8.pt-20 > div > p"
+    fallback_selectors:
+      - "main div p"
+      - "p"
+    timeout: 30
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
+
+  - name: "awesome_mcp_servers"
+    url: "https://mcpservers.org/"
+    count_selector: "body > div.container.mx-auto.px-4.py-8 > div.max-w-screen-2xl.mx-auto > div.mb-4.text-left.text-sm.text-gray-600"
+    fallback_selectors:
+      - ".text-gray-600"
+      - ".text-sm"
+      - "div.text-left"
+    timeout: 30
+    headers:
+      User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" 
