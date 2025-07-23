@@ -15,6 +15,8 @@ from bs4 import BeautifulSoup
 import re
 from dataclasses import dataclass, asdict
 import time
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +150,34 @@ class StatsCrawler:
         session = await self._get_session()
         
         try:
+            # cursor.directory 特殊处理
+            if site_config.get('type') == 'selenium_scroll_count':
+                chrome_options = Options()
+                chrome_options.add_argument('--headless')
+                chrome_options.add_argument('--no-sandbox')
+                chrome_options.add_argument('--disable-dev-shm-usage')
+                driver = webdriver.Chrome(options=chrome_options)
+                driver.set_page_load_timeout(site_config.get('timeout', 60))
+                driver.get(site_config['url'])
+                last_count = 0
+                scroll_pause = 2
+                while True:
+                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                    time.sleep(scroll_pause)
+                    elements = driver.find_elements('css selector', site_config['selector'])
+                    if len(elements) == last_count:
+                        break
+                    last_count = len(elements)
+                server_count = last_count
+                driver.quit()
+                return SiteStats(
+                    site_name=site_config['name'],
+                    url=site_config['url'],
+                    server_count=server_count,
+                    crawled_at=datetime.now().isoformat(),
+                    status="success",
+                    response_time=time.time() - start_time
+                )
             # 处理Cloudflare保护的网站
             if site_config.get('cloudflare_protected', False):
                 # 使用更真实的User-Agent

@@ -77,3 +77,8 @@ sites:
     timeout: 30
     headers:
       User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" 
+  - name: "cursor_directory"
+    url: "https://cursor.directory/mcp"
+    type: "selenium_scroll_count"
+    selector: "a.h-full"
+    timeout: 60 
