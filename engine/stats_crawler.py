@@ -144,40 +144,45 @@ class StatsCrawler:
         
         return None
     
+    def _selenium_count(self, site_config):
+        start_time = time.time()
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(site_config.get('timeout', 60))
+        driver.get(site_config['url'])
+        last_count = 0
+        scroll_pause = 2
+        while True:
+            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+            time.sleep(scroll_pause)
+            elements = driver.find_elements('css selector', site_config['selector'])
+            if len(elements) == last_count:
+                break
+            last_count = len(elements)
+        server_count = last_count
+        driver.quit()
+        return SiteStats(
+            site_name=site_config['name'],
+            url=site_config['url'],
+            server_count=server_count,
+            crawled_at=datetime.now().isoformat(),
+            status="success",
+            response_time=time.time() - start_time
+        )
+
     async def crawl_site_stats(self, site_config: Dict[str, Any]) -> SiteStats:
         """爬取单个网站的统计信息"""
         start_time = time.time()
         session = await self._get_session()
         
         try:
-            # cursor.directory 特殊处理
+            # cursor.directory 特殊处理（用线程池避免阻塞事件循环）
             if site_config.get('type') == 'selenium_scroll_count':
-                chrome_options = Options()
-                chrome_options.add_argument('--headless')
-                chrome_options.add_argument('--no-sandbox')
-                chrome_options.add_argument('--disable-dev-shm-usage')
-                driver = webdriver.Chrome(options=chrome_options)
-                driver.set_page_load_timeout(site_config.get('timeout', 60))
-                driver.get(site_config['url'])
-                last_count = 0
-                scroll_pause = 2
-                while True:
-                    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                    time.sleep(scroll_pause)
-                    elements = driver.find_elements('css selector', site_config['selector'])
-                    if len(elements) == last_count:
-                        break
-                    last_count = len(elements)
-                server_count = last_count
-                driver.quit()
-                return SiteStats(
-                    site_name=site_config['name'],
-                    url=site_config['url'],
-                    server_count=server_count,
-                    crawled_at=datetime.now().isoformat(),
-                    status="success",
-                    response_time=time.time() - start_time
-                )
+                loop = asyncio.get_event_loop()
+                return await loop.run_in_executor(None, self._selenium_count, site_config)
             # 处理Cloudflare保护的网站
             if site_config.get('cloudflare_protected', False):
                 # 使用更真实的User-Agent
