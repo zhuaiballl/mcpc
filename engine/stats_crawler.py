@@ -17,6 +17,7 @@ from dataclasses import dataclass, asdict
 import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
 
 logger = logging.getLogger(__name__)
 
@@ -173,79 +174,201 @@ class StatsCrawler:
             response_time=time.time() - start_time
         )
 
+    def _selenium_text(self, site_config):
+        import re
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
+        import time
+        start_time = time.time()
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(site_config.get('timeout', 60))
+        driver.get(site_config['url'])
+        selectors = [site_config['count_selector']] + site_config.get('fallback_selectors', [])
+        server_count = None
+        for selector in selectors:
+            try:
+                elements = driver.find_elements(By.CSS_SELECTOR, selector.replace('\\:', ':'))
+                for element in elements:
+                    text = element.text.replace(',', '')
+                    numbers = re.findall(r'\d+', text)
+                    if numbers:
+                        server_count = int(numbers[0])
+                        break
+                if server_count is not None:
+                    break
+            except Exception:
+                continue
+        driver.quit()
+        if server_count is not None:
+            return SiteStats(
+                site_name=site_config['name'],
+                url=site_config['url'],
+                server_count=server_count,
+                crawled_at=datetime.now().isoformat(),
+                status="success",
+                response_time=time.time() - start_time
+            )
+        else:
+            return SiteStats(
+                site_name=site_config['name'],
+                url=site_config['url'],
+                server_count=0,
+                crawled_at=datetime.now().isoformat(),
+                status="error",
+                error_message="Selenium未能提取服务器数量",
+                response_time=time.time() - start_time
+            )
+
     async def crawl_site_stats(self, site_config: Dict[str, Any]) -> SiteStats:
         """爬取单个网站的统计信息"""
         start_time = time.time()
         session = await self._get_session()
         
-        try:
-            # cursor.directory 特殊处理（用线程池避免阻塞事件循环）
-            if site_config.get('type') == 'selenium_scroll_count':
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(None, self._selenium_count, site_config)
-            # 处理Cloudflare保护的网站
-            if site_config.get('cloudflare_protected', False):
-                # 使用更真实的User-Agent
-                user_agent = site_config.get('user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-                headers = {
-                    'User-Agent': user_agent,
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.5',
-                    'Accept-Encoding': 'gzip, deflate',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                }
+        # 获取重试配置
+        max_retries = site_config.get('max_retries', 1)
+        retry_delay = site_config.get('retry_delay', 5)
+        
+        for attempt in range(max_retries + 1):
+            try:
+                # cursor.directory 特殊处理（用线程池避免阻塞事件循环）
+                if site_config.get('type') == 'selenium_scroll_count':
+                    loop = asyncio.get_event_loop()
+                    return await loop.run_in_executor(None, self._selenium_count, site_config)
+                # mcp_market selenium_text
+                if site_config.get('type') == 'selenium_text':
+                    loop = asyncio.get_event_loop()
+                    return await loop.run_in_executor(None, self._selenium_text, site_config)
                 
-                # 添加请求延迟
-                request_delay = site_config.get('request_delay', 5)
-                if request_delay > 0:
-                    await asyncio.sleep(request_delay)
-            else:
-                headers = site_config.get('headers', {})
-            
-            timeout = aiohttp.ClientTimeout(total=site_config.get('timeout', 30))
-            
-            async with session.get(site_config['url'], headers=headers, timeout=timeout) as response:
-                response_time = time.time() - start_time
+                # 处理Cloudflare保护的网站
+                if site_config.get('cloudflare_protected', False):
+                    # 使用更真实的User-Agent
+                    user_agent = site_config.get('user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+                    headers = {
+                        'User-Agent': user_agent,
+                        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.5',
+                        'Accept-Encoding': 'gzip, deflate',
+                        'Connection': 'keep-alive',
+                        'Upgrade-Insecure-Requests': '1',
+                        'Sec-Fetch-Dest': 'document',
+                        'Sec-Fetch-Mode': 'navigate',
+                        'Sec-Fetch-Site': 'none',
+                        'Cache-Control': 'max-age=0',
+                    }
+                    
+                    # 添加请求延迟
+                    request_delay = site_config.get('request_delay', 5)
+                    if request_delay > 0:
+                        await asyncio.sleep(request_delay)
+                else:
+                    headers = site_config.get('headers', {})
                 
-                if response.status == 200:
-                    html = await response.text()
+                timeout = aiohttp.ClientTimeout(total=site_config.get('timeout', 30))
+                
+                async with session.get(site_config['url'], headers=headers, timeout=timeout) as response:
+                    response_time = time.time() - start_time
                     
-                    # 检查是否被Cloudflare拦截
-                    if 'cloudflare' in html.lower() and ('checking your browser' in html.lower() or 'ray id' in html.lower()):
-                        return SiteStats(
-                            site_name=site_config['name'],
-                            url=site_config['url'],
-                            server_count=0,
-                            crawled_at=datetime.now().isoformat(),
-                            status="error",
-                            error_message="被Cloudflare拦截",
-                            response_time=response_time
-                        )
+                    # 处理 429 错误
+                    if response.status == 429:
+                        if attempt < max_retries:
+                            logger.warning(f"网站 {site_config['name']} 返回 429 错误，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                            await asyncio.sleep(retry_delay)
+                            continue
+                        else:
+                            return SiteStats(
+                                site_name=site_config['name'],
+                                url=site_config['url'],
+                                server_count=0,
+                                crawled_at=datetime.now().isoformat(),
+                                status="error",
+                                error_message=f"HTTP 429 - 请求过于频繁，已重试 {max_retries} 次",
+                                response_time=response_time
+                            )
                     
-                    # 提取数量
-                    count_selectors = [site_config['count_selector']] + site_config.get('fallback_selectors', [])
-                    server_count = await self._extract_count_from_html(html, count_selectors)
-                    
-                    if server_count is not None:
-                        return SiteStats(
-                            site_name=site_config['name'],
-                            url=site_config['url'],
-                            server_count=server_count,
-                            crawled_at=datetime.now().isoformat(),
-                            status="success",
-                            response_time=response_time
-                        )
+                    if response.status == 200:
+                        html = await response.text()
+                        
+                        # 检查是否被Cloudflare拦截
+                        if 'cloudflare' in html.lower() and ('checking your browser' in html.lower() or 'ray id' in html.lower()):
+                            if attempt < max_retries:
+                                logger.warning(f"网站 {site_config['name']} 被Cloudflare拦截，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                                await asyncio.sleep(retry_delay)
+                                continue
+                            else:
+                                return SiteStats(
+                                    site_name=site_config['name'],
+                                    url=site_config['url'],
+                                    server_count=0,
+                                    crawled_at=datetime.now().isoformat(),
+                                    status="error",
+                                    error_message="被Cloudflare拦截",
+                                    response_time=response_time
+                                )
+                        
+                        # 提取数量
+                        count_selectors = [site_config['count_selector']] + site_config.get('fallback_selectors', [])
+                        server_count = await self._extract_count_from_html(html, count_selectors)
+                        
+                        if server_count is not None:
+                            return SiteStats(
+                                site_name=site_config['name'],
+                                url=site_config['url'],
+                                server_count=server_count,
+                                crawled_at=datetime.now().isoformat(),
+                                status="success",
+                                response_time=response_time
+                            )
+                        else:
+                            return SiteStats(
+                                site_name=site_config['name'],
+                                url=site_config['url'],
+                                server_count=0,
+                                crawled_at=datetime.now().isoformat(),
+                                status="error",
+                                error_message="无法提取服务器数量",
+                                response_time=response_time
+                            )
                     else:
-                        return SiteStats(
-                            site_name=site_config['name'],
-                            url=site_config['url'],
-                            server_count=0,
-                            crawled_at=datetime.now().isoformat(),
-                            status="error",
-                            error_message="无法提取服务器数量",
-                            response_time=response_time
-                        )
+                        if attempt < max_retries and response.status in [429, 500, 502, 503, 504]:
+                            logger.warning(f"网站 {site_config['name']} 返回 HTTP {response.status}，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                            await asyncio.sleep(retry_delay)
+                            continue
+                        else:
+                            return SiteStats(
+                                site_name=site_config['name'],
+                                url=site_config['url'],
+                                server_count=0,
+                                crawled_at=datetime.now().isoformat(),
+                                status="error",
+                                error_message=f"HTTP {response.status}",
+                                response_time=time.time() - start_time
+                            )
+                        
+            except asyncio.TimeoutError:
+                if attempt < max_retries:
+                    logger.warning(f"网站 {site_config['name']} 请求超时，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                    await asyncio.sleep(retry_delay)
+                    continue
+                else:
+                    return SiteStats(
+                        site_name=site_config['name'],
+                        url=site_config['url'],
+                        server_count=0,
+                        crawled_at=datetime.now().isoformat(),
+                        status="timeout",
+                        error_message="请求超时",
+                        response_time=time.time() - start_time
+                    )
+            except Exception as e:
+                if attempt < max_retries:
+                    logger.warning(f"网站 {site_config['name']} 请求失败: {e}，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                    await asyncio.sleep(retry_delay)
+                    continue
                 else:
                     return SiteStats(
                         site_name=site_config['name'],
@@ -253,30 +376,9 @@ class StatsCrawler:
                         server_count=0,
                         crawled_at=datetime.now().isoformat(),
                         status="error",
-                        error_message=f"HTTP {response.status}",
+                        error_message=str(e),
                         response_time=time.time() - start_time
                     )
-                    
-        except asyncio.TimeoutError:
-            return SiteStats(
-                site_name=site_config['name'],
-                url=site_config['url'],
-                server_count=0,
-                crawled_at=datetime.now().isoformat(),
-                status="timeout",
-                error_message="请求超时",
-                response_time=time.time() - start_time
-            )
-        except Exception as e:
-            return SiteStats(
-                site_name=site_config['name'],
-                url=site_config['url'],
-                server_count=0,
-                crawled_at=datetime.now().isoformat(),
-                status="error",
-                error_message=str(e),
-                response_time=time.time() - start_time
-            )
     
     async def crawl_all_sites(self) -> List[SiteStats]:
         """爬取所有网站的统计信息"""
