@@ -25,8 +25,8 @@ class PulseCrawler(DistributedCrawler):
         self.github_token = os.getenv('GITHUB_TOKEN')
 
     def _normalize_path(self, path):
-        """规范化路径，移除特殊字符"""
-        # 替换特殊字符为下划线
+        """Normalize path by removing special characters"""
+        # Replace special characters with underscore
         normalized = path.replace('@', '_').replace('/', '_').replace('\\', '_')
         return normalized
 
@@ -42,12 +42,13 @@ class PulseCrawler(DistributedCrawler):
         return None, None
 
     def _download_github_repo(self, repo_url: str, dest_dir: Path):
+        """Download GitHub repo contents to local directory"""
         if not self.github_token:
-            print("未设置 GITHUB_TOKEN，无法抓取 GitHub repo")
+            print("GITHUB_TOKEN not set, cannot download GitHub repo")
             return
         owner, repo = self.extract_github_repo_info(repo_url)
         if not owner or not repo:
-            print(f"链接不是有效的GitHub仓库链接，已跳过: {repo_url}")
+            print(f"Invalid GitHub repo URL, skipped: {repo_url}")
             return
         api_url = f'https://api.github.com/repos/{owner}/{repo}/contents'
         headers = {'Authorization': f'token {self.github_token}'}
@@ -71,16 +72,16 @@ class PulseCrawler(DistributedCrawler):
         os.makedirs(dest_dir, exist_ok=True)
         try:
             download_dir(api_url, str(dest_dir))
-            print(f"已抓取 GitHub repo: {repo_url} 到 {dest_dir}")
+            print(f"Downloaded GitHub repo: {repo_url} to {dest_dir}")
         except Exception as e:
-            print(f"抓取 GitHub repo {repo_url} 失败: {e}")
+            print(f"Failed to download GitHub repo {repo_url}: {e}")
 
     async def _fetch_page(self, site_config: Dict[str, Any]) -> Dict[str, Any]:
-        """获取Pulse API的页面数据
+        """Fetch page data from Pulse API
         Args:
-            site_config: 站点配置
+            site_config: Site configuration
         Returns:
-            API响应数据
+            API response data
         """
         params = {
             'count_per_page': 100,
@@ -88,7 +89,7 @@ class PulseCrawler(DistributedCrawler):
         }
         if 'query' in site_config:
             params['query'] = site_config['query']
-        print(f"请求参数: {params}")
+        print(f"Request params: {params}")
         response = self.session.get(
             f"{self.base_url}/servers",
             params=params
@@ -96,43 +97,43 @@ class PulseCrawler(DistributedCrawler):
         if response.status_code != 200:
             raise Exception(f"Failed to fetch Pulse API: {response.status_code}")
         data = response.json()
-        print(f"Pulse API响应状态码: {response.status_code}")
-        print(f"Pulse API响应内容: {json.dumps(data, indent=2)[:1000]}...")
+        print(f"Pulse API response status code: {response.status_code}")
+        print(f"Pulse API response content: {json.dumps(data, indent=2)[:1000]}...")
         return data
 
     async def crawl_site(self, site_config) -> AsyncIterator[Dict[str, Any]]:
-        """异步迭代器实现，用于分页获取数据
+        """Asynchronous iterator implementation for pagination
         Args:
-            site_config: 站点配置
+            site_config: Site configuration
         Returns:
-            AsyncIterator[Dict[str, Any]]: 异步迭代器，每次迭代返回一页数据
+            AsyncIterator[Dict[str, Any]]: Asynchronous iterator, each iteration returns a page of data
         """
         try:
             offset = 0
             total_servers = 0
-            all_servers = []  # 收集所有服务器数据
+            all_servers = []  # Collect all server data
             
             while True:
-                print(f"正在抓取偏移量 {offset}...")
+                print(f"Crawling with offset {offset}...")
                 site_config['offset'] = offset
                 data = await self._fetch_page_with_retry(site_config)
                 if not data:
-                    print("没有获取到数据，可能已达到最后一页")
+                    print("No data received, may be the last page")
                     break
                 
-                # 处理服务器数据
+                # Process server data
                 servers = data.get('servers', [])
-                if not servers:  # 如果返回的服务器列表为空，说明已经到达最后一页
-                    print("获取到空列表，已到达最后一页")
+                if not servers:  # If the returned server list is empty, it means we have reached the last page
+                    print("Empty server list received, may be the last page")
                     break
                     
                 total_servers += len(servers)
-                print(f"本页获取到 {len(servers)} 条服务器数据，总计 {total_servers} 条")
+                print(f"Received {len(servers)} servers, total {total_servers} so far")
                 
-                # 处理每个服务器的数据
+                # Process each server's data
                 for server in servers:
                     try:
-                        # 保存服务器元数据
+                        # Save server metadata
                         metadata = {
                             'name': server.get('name', ''),
                             'url': server.get('url', ''),
@@ -144,31 +145,33 @@ class PulseCrawler(DistributedCrawler):
                             'package_name': server.get('package_name', ''),
                             'package_download_count': server.get('package_download_count', 0),
                             'ai_generated_description': server.get('EXPERIMENTAL_ai_generated_description', ''),
+                            'categories': server.get('categories', []),
+                            'tags': server.get('tags', []),
                             'source': 'pulse',
                             'crawled_at': datetime.now().isoformat()
                         }
                         
                         all_servers.append(metadata)
-                        print(f"已收集服务器元数据: {server.get('name', 'unknown')}")
+                        print(f"Collected metadata for server: {server.get('name', 'unknown')}")
                         
                     except Exception as e:
-                        print(f"处理服务器 {server.get('name', 'unknown')} 时发生错误: {str(e)}")
+                        print(f"Error processing server {server.get('name', 'unknown')}: {str(e)}")
                         continue
                 
                 yield data
                 
-                # 检查是否有下一页
+                # Check if there is next page
                 next_url = data.get('next')
                 if not next_url:
-                    print("没有下一页数据，停止抓取")
+                    print("No next page data, stop crawling")
                     break
                     
-                # 更新下一页URL
+                # Update next page URL
                 site_config['next_url'] = next_url
                 
                 offset += len(servers)
-            
-            # 保存所有服务器的汇总信息
+                
+            # Save all servers' summary information
             summary_path = self.output_dir / "pulse.json"
             with open(summary_path, 'w') as f:
                 json.dump({
@@ -177,28 +180,28 @@ class PulseCrawler(DistributedCrawler):
                     'crawled_at': datetime.now().isoformat(),
                     'servers': all_servers
                 }, f, indent=2)
-            print(f"已保存所有服务器汇总信息: {summary_path}")
+            print(f"All servers summary saved to: {summary_path}")
                 
         except Exception as e:
-            print(f"抓取过程中发生错误: {str(e)}")
+            print(f"Error during pulse crawling: {str(e)}")
             raise
 
     async def run(self):
-        """运行爬虫的主方法"""
+        """Run the pulse crawler's main method"""
         try:
-            # 确保配置存在
+            # Ensure configuration exists
             if not self.configs:
                 raise ValueError("No configuration found")
             
-            # 获取第一个配置（pulse的配置）
+            # Get the first configuration (pulse's configuration)
             site_config = self.configs[0]
             
-            # 使用异步迭代器处理数据
+            # Use asynchronous iterator to process data
             async for result in self.crawl_site(site_config):
-                print(f"已抓取到 {len(result.get('servers', []))} 条pulse服务器数据")
+                print(f"Collected {len(result.get('servers', []))} pulse server records")
             
-            print("pulse数据抓取完成")
+            print("Pulse data crawling completed")
             
         except Exception as e:
-            print(f"运行爬虫时发生错误: {str(e)}")
+            print(f"Error running pulse crawler: {str(e)}")
             raise 

@@ -1,6 +1,6 @@
 """
-MCP服务器数量统计爬虫
-用于定期获取各个网站收录的MCP服务器数量
+MCP Server Count Statistics Crawler
+Used to periodically get the number of MCP servers recorded on various websites
 """
 
 import asyncio
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class SiteStats:
-    """网站统计信息"""
+    """Website statistics information"""
     site_name: str
     url: str
     server_count: int
@@ -35,7 +35,7 @@ class SiteStats:
 
 
 class StatsCrawler:
-    """MCP服务器数量统计爬虫"""
+    """MCP server count statistics crawler"""   
     
     def __init__(self, config_path: str = "config/stats_config.yaml"):
         self.config_path = Path(config_path)
@@ -43,9 +43,9 @@ class StatsCrawler:
         self.session = None
         
     def _load_config(self) -> Dict[str, Any]:
-        """加载配置文件"""
+        """Load configuration file"""
         if not self.config_path.exists():
-            # 创建默认配置
+            # Create default configuration file
             default_config = {
                 "sites": [
                     {
@@ -73,26 +73,26 @@ class StatsCrawler:
             return yaml.safe_load(f)
     
     def _save_config(self, config: Dict[str, Any]):
-        """保存配置文件"""
+        """Save configuration file"""
         self.config_path.parent.mkdir(exist_ok=True)
         with open(self.config_path, 'w', encoding='utf-8') as f:
             yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
     
     async def _get_session(self) -> aiohttp.ClientSession:
-        """获取HTTP会话"""
+        """Get HTTP session"""
         if self.session is None or self.session.closed:
             timeout = aiohttp.ClientTimeout(total=30)
             self.session = aiohttp.ClientSession(timeout=timeout)
         return self.session
     
     async def _extract_count_from_html(self, html: str, selectors: List[str]) -> Optional[int]:
-        """从HTML中提取数量"""
+        """Extract server count from HTML using specified selectors"""
         soup = BeautifulSoup(html, 'html.parser')
         
         for selector in selectors:
             try:
                 if ':contains(' in selector:
-                    # 处理包含文本的选择器
+                    # Process text-containing selectors
                     text_pattern = re.search(r':contains\(["\']?([^"\']+)["\']?\)', selector)
                     if text_pattern:
                         search_text = text_pattern.group(1)
@@ -100,39 +100,38 @@ class StatsCrawler:
                         for element in elements:
                             parent = element.parent
                             if parent:
-                                # 查找父元素中的数字
+                                # Find numbers in parent element's text
                                 text = parent.get_text()
                                 numbers = re.findall(r'\d+', text)
                                 if numbers:
                                     return int(numbers[0])
                 else:
-                    # 处理CSS选择器中的转义字符
-                    # 将 \: 转换为 : 用于CSS选择器
+                    # Process CSS selectors with escaped characters
                     processed_selector = selector.replace('\\:', ':')
                     
-                    # 普通CSS选择器
+                    # Process normal CSS selectors
                     elements = soup.select(processed_selector)
                     for element in elements:
-                        # 尝试从元素文本中提取数字
+                        # Try to extract number from element text
                         text = element.get_text()
                         
-                        # 处理包含千位分隔符的数字 (如 "11,000")
-                        # 先移除逗号，然后提取数字
+                        # Handle numbers with commas (e.g. "11,000")
+                        # First remove commas, then extract number
                         text_clean = text.replace(',', '')
                         
-                        # 提取所有数字
+                        # Extract all numbers
                         numbers = re.findall(r'\d+', text_clean)
                         if numbers:
-                            # 对于 "Showing 1-30 of 1158 servers" 这种情况，取最后一个数字
-                            # 对于 "11,000" 这种情况，取第一个数字
+                            # For "Showing 1-30 of 1158 servers" cases, take the last number
+                            # For "11,000" cases, take the first number
                             if 'of' in text.lower() and len(numbers) > 1:
-                                # 如果文本包含 "of"，通常最后一个数字是总数
+                                # If text contains "of", usually the last number is the total count
                                 return int(numbers[-1])
                             else:
-                                # 否则取第一个数字
+                                # Otherwise, take the first number
                                 return int(numbers[0])
                         
-                        # 尝试从data属性中获取
+                        # Try to extract number from data attributes
                         for attr in ['data-count', 'data-total', 'data-servers']:
                             if element.has_attr(attr):
                                 try:
@@ -140,7 +139,7 @@ class StatsCrawler:
                                 except (ValueError, TypeError):
                                     continue
             except Exception as e:
-                logger.debug(f"选择器 {selector} 失败: {e}")
+                logger.debug(f"Selector {selector} failed: {e}")
                 continue
         
         return None
@@ -220,22 +219,127 @@ class StatsCrawler:
                 server_count=0,
                 crawled_at=datetime.now().isoformat(),
                 status="error",
-                error_message="Selenium未能提取服务器数量",
+                error_message="Selenium failed to extract server count",
                 response_time=time.time() - start_time
             )
 
+    # Add after the _selenium_text method
+    
+    # Add pagination count method after the _selenium_text method
+    def _selenium_pagination_count(self, site_config):
+        """Count total servers using pagination"""
+        start_time = time.time()
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(site_config.get('timeout', 60))
+        
+        total_count = 0
+        current_page = 1
+        max_pages = site_config.get('max_pages', 100)  # Set the maximum number of pages to prevent infinite loops
+        item_selector = site_config.get('item_selector', 'div.server-item')
+        next_page_selector = site_config.get('next_page_selector', 'a.next-page')
+        page_delay = site_config.get('page_delay', 2)  # Page load delay
+        
+        # Variables for speed statistics
+        page_times = []  # Record processing time for each page
+        
+        try:
+            # Visit the first page
+            driver.get(site_config['url'])
+            
+            while current_page <= max_pages:
+                # Record the start time for the current page
+                page_start_time = time.time()
+                
+                # Wait for the page to load
+                time.sleep(page_delay)
+                
+                # Count the number of servers on the current page
+                items = driver.find_elements(By.CSS_SELECTOR, item_selector)
+                current_page_count = len(items)
+                total_count += current_page_count
+                
+                # Calculate the processing time for the current page
+                page_process_time = time.time() - page_start_time
+                # Record the processing time for the current page
+                page_times.append(page_process_time)
+                
+                # Calculate the average processing speed
+                avg_page_time = sum(page_times) / len(page_times) if page_times else 0
+                pages_per_minute = 60 / avg_page_time if avg_page_time > 0 else 0
+                items_per_minute = total_count / (time.time() - start_time) * 60 if (time.time() - start_time) > 0 else 0
+                
+                # Calculate the elapsed time
+                elapsed_time = time.time() - start_time
+                elapsed_minutes = elapsed_time / 60
+                
+                # Estimate the remaining time (based on average processing time and processed pages)
+                estimated_remaining_pages = max_pages - current_page
+                estimated_remaining_time = estimated_remaining_pages * avg_page_time
+                estimated_remaining_minutes = estimated_remaining_time / 60
+                
+                # Record the current page processing speed information
+                logger.info(f"mcp.so page {current_page}/{max_pages}: {current_page_count} servers, total: {total_count}")
+                logger.info(f"  - processing speed: {pages_per_minute:.1f} pages/min, {items_per_minute:.1f} items/min")
+                logger.info(f"  - elapsed time: {elapsed_minutes:.1f} minutes")
+                logger.info(f"  - estimated remaining time: {estimated_remaining_minutes:.1f} minutes")
+                
+                # Try to find the next page button
+                try:
+                    next_page_button = driver.find_element(By.CSS_SELECTOR, next_page_selector)
+                    # Check if the next page button is clickable
+                    if next_page_button.is_enabled() and next_page_button.is_displayed():
+                        # Scroll to the next page button
+                        driver.execute_script("arguments[0].scrollIntoView();", next_page_button)
+                        time.sleep(0.5)  # Wait for scroll to complete
+                        next_page_button.click()
+                        current_page += 1
+                    else:
+                        logger.info("Reached last page")
+                        break
+                except Exception as e:
+                    logger.info(f"Failed to find or click next page button: {e}")
+                    break
+        except Exception as e:
+            logger.error(f"Error occurred during pagination crawl: {e}")
+        finally:
+            # Calculate the total crawl time and final speed
+            total_time = time.time() - start_time
+            total_minutes = total_time / 60
+            final_items_per_minute = total_count / total_time * 60 if total_time > 0 else 0
+            
+            logger.info(f"mcp.so pagination crawl completed - total server count: {total_count}")
+            logger.info(f"  - total crawl time: {total_minutes:.1f} minutes")
+            logger.info(f"  - average crawl speed: {final_items_per_minute:.1f} items/min")
+            
+            driver.quit()
+        
+        return SiteStats(
+            site_name=site_config['name'],
+            url=site_config['url'],
+            server_count=total_count,
+            crawled_at=datetime.now().isoformat(),
+            status="success" if total_count > 0 else "error",
+            error_message="Failed to extract server count through pagination" if total_count == 0 else None,
+            response_time=time.time() - start_time
+        )
+    
+
     async def crawl_site_stats(self, site_config: Dict[str, Any]) -> SiteStats:
-        """爬取单个网站的统计信息"""
+        """Crawl statistics for a single website"""
         start_time = time.time()
         session = await self._get_session()
         
-        # 获取重试配置
+        # Get the retry configuration from the site configuration
         max_retries = site_config.get('max_retries', 1)
         retry_delay = site_config.get('retry_delay', 5)
         
         for attempt in range(max_retries + 1):
             try:
-                # cursor.directory 特殊处理（用线程池避免阻塞事件循环）
+                # cursor.directory special case
                 if site_config.get('type') == 'selenium_scroll_count':
                     loop = asyncio.get_event_loop()
                     return await loop.run_in_executor(None, self._selenium_count, site_config)
@@ -243,10 +347,14 @@ class StatsCrawler:
                 if site_config.get('type') == 'selenium_text':
                     loop = asyncio.get_event_loop()
                     return await loop.run_in_executor(None, self._selenium_text, site_config)
+                # mcp_so selenium_pagination_count
+                if site_config.get('type') == 'selenium_pagination_count':
+                    loop = asyncio.get_event_loop()
+                    return await loop.run_in_executor(None, self._selenium_pagination_count, site_config)
                 
-                # 处理Cloudflare保护的网站
+                # Handle Cloudflare protected websites
                 if site_config.get('cloudflare_protected', False):
-                    # 使用更真实的User-Agent
+                    # Use a more realistic User-Agent
                     user_agent = site_config.get('user_agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
                     headers = {
                         'User-Agent': user_agent,
@@ -261,7 +369,7 @@ class StatsCrawler:
                         'Cache-Control': 'max-age=0',
                     }
                     
-                    # 添加请求延迟
+                    # Add request delay to avoid Cloudflare detection
                     request_delay = site_config.get('request_delay', 5)
                     if request_delay > 0:
                         await asyncio.sleep(request_delay)
@@ -273,10 +381,10 @@ class StatsCrawler:
                 async with session.get(site_config['url'], headers=headers, timeout=timeout) as response:
                     response_time = time.time() - start_time
                     
-                    # 处理 429 错误
+                    # Handle 429 error (Too many requests)
                     if response.status == 429:
                         if attempt < max_retries:
-                            logger.warning(f"网站 {site_config['name']} 返回 429 错误，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                            logger.warning(f"Website {site_config['name']} returned 429 error, retry {attempt + 1} times, wait {retry_delay} seconds...")
                             await asyncio.sleep(retry_delay)
                             continue
                         else:
@@ -286,17 +394,17 @@ class StatsCrawler:
                                 server_count=0,
                                 crawled_at=datetime.now().isoformat(),
                                 status="error",
-                                error_message=f"HTTP 429 - 请求过于频繁，已重试 {max_retries} 次",
+                                error_message=f"HTTP 429 - Too many requests, retried {max_retries} times",
                                 response_time=response_time
                             )
                     
                     if response.status == 200:
                         html = await response.text()
                         
-                        # 检查是否被Cloudflare拦截
+                        # Check if Cloudflare interception is detected
                         if 'cloudflare' in html.lower() and ('checking your browser' in html.lower() or 'ray id' in html.lower()):
                             if attempt < max_retries:
-                                logger.warning(f"网站 {site_config['name']} 被Cloudflare拦截，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                                logger.warning(f"Website {site_config['name']} intercepted by Cloudflare, retry {attempt + 1} times, wait {retry_delay} seconds...")
                                 await asyncio.sleep(retry_delay)
                                 continue
                             else:
@@ -306,14 +414,15 @@ class StatsCrawler:
                                     server_count=0,
                                     crawled_at=datetime.now().isoformat(),
                                     status="error",
-                                    error_message="被Cloudflare拦截",
+                                    error_message="Cloudflare interception detected",
                                     response_time=response_time
                                 )
                         
-                        # 提取数量
+                        # Extract server count using the primary selector
                         count_selectors = [site_config['count_selector']] + site_config.get('fallback_selectors', [])
                         server_count = await self._extract_count_from_html(html, count_selectors)
                         
+                        # Successfully extracted server count
                         if server_count is not None:
                             return SiteStats(
                                 site_name=site_config['name'],
@@ -330,12 +439,12 @@ class StatsCrawler:
                                 server_count=0,
                                 crawled_at=datetime.now().isoformat(),
                                 status="error",
-                                error_message="无法提取服务器数量",
+                                error_message="Failed to extract server count",
                                 response_time=response_time
                             )
                     else:
                         if attempt < max_retries and response.status in [429, 500, 502, 503, 504]:
-                            logger.warning(f"网站 {site_config['name']} 返回 HTTP {response.status}，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                            logger.warning(f"Website {site_config['name']} returned HTTP {response.status}, retry {attempt + 1} times, wait {retry_delay} seconds...")
                             await asyncio.sleep(retry_delay)
                             continue
                         else:
@@ -351,7 +460,7 @@ class StatsCrawler:
                         
             except asyncio.TimeoutError:
                 if attempt < max_retries:
-                    logger.warning(f"网站 {site_config['name']} 请求超时，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                    logger.warning(f"Website {site_config['name']} request timeout, retry {attempt + 1} times, wait {retry_delay} seconds...")
                     await asyncio.sleep(retry_delay)
                     continue
                 else:
@@ -361,12 +470,12 @@ class StatsCrawler:
                         server_count=0,
                         crawled_at=datetime.now().isoformat(),
                         status="timeout",
-                        error_message="请求超时",
+                        error_message="Request timeout",
                         response_time=time.time() - start_time
                     )
             except Exception as e:
                 if attempt < max_retries:
-                    logger.warning(f"网站 {site_config['name']} 请求失败: {e}，第 {attempt + 1} 次重试，等待 {retry_delay} 秒...")
+                    logger.warning(f"Website {site_config['name']} request failed: {e}, retry {attempt + 1} times, wait {retry_delay} seconds...")
                     await asyncio.sleep(retry_delay)
                     continue
                 else:
@@ -381,7 +490,7 @@ class StatsCrawler:
                     )
     
     async def crawl_all_sites(self) -> List[SiteStats]:
-        """爬取所有网站的统计信息"""
+        """Crawl statistics for all sites"""
         tasks = []
         for site_config in self.config['sites']:
             task = self.crawl_site_stats(site_config)
@@ -389,12 +498,12 @@ class StatsCrawler:
         
         results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # 处理异常结果
+        # Process exception results
         stats = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
                 site_config = self.config['sites'][i]
-                logger.error(f"网站 {site_config['name']} 爬取失败: {result}")
+                logger.error(f"Website {site_config['name']} crawl failed: {result}")
                 stats.append(SiteStats(
                     site_name=site_config['name'],
                     url=site_config['url'],
@@ -409,47 +518,47 @@ class StatsCrawler:
         return stats
     
     def save_stats(self, stats: List[SiteStats]):
-        """保存统计结果"""
+        """Save statistics results"""
         output_dir = Path(self.config['output_dir'])
         output_dir.mkdir(exist_ok=True)
         
-        # 保存当前统计结果
+        # Save current statistics results
         current_file = output_dir / f"stats_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(current_file, 'w', encoding='utf-8') as f:
             json.dump([asdict(stat) for stat in stats], f, ensure_ascii=False, indent=2)
         
-        # 保存最新统计结果
+        # Save latest statistics results
         latest_file = output_dir / "latest_stats.json"
         with open(latest_file, 'w', encoding='utf-8') as f:
             json.dump([asdict(stat) for stat in stats], f, ensure_ascii=False, indent=2)
         
-        # 更新历史记录
+        # Update history records
         history_file = output_dir / "stats_history.json"
         history = []
         if history_file.exists():
             with open(history_file, 'r', encoding='utf-8') as f:
                 history = json.load(f)
         
-        # 添加新的统计记录
+        # Add new statistics record
         history.append({
             "timestamp": datetime.now().isoformat(),
             "stats": [asdict(stat) for stat in stats]
         })
         
-        # 只保留最近100条记录
+        # Keep only the latest 100 records
         if len(history) > 100:
             history = history[-100:]
         
         with open(history_file, 'w', encoding='utf-8') as f:
             json.dump(history, f, ensure_ascii=False, indent=2)
         
-        logger.info(f"统计结果已保存到 {current_file}")
-    
+        logger.info(f"Statistics results saved to {current_file}")
+        
     def generate_report(self, stats: List[SiteStats]) -> str:
-        """生成统计报告"""
+        """Generate statistics report"""
         report = []
-        report.append("# MCP服务器数量统计报告")
-        report.append(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        report.append("# MCP Server Count Statistics Report")
+        report.append(f"Generated at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         report.append("")
         
         total_servers = 0
@@ -458,14 +567,14 @@ class StatsCrawler:
         for stat in stats:
             report.append(f"## {stat.site_name}")
             report.append(f"- URL: {stat.url}")
-            report.append(f"- 服务器数量: {stat.server_count}")
-            report.append(f"- 状态: {stat.status}")
+            report.append(f"- Server Count: {stat.server_count}")
+            report.append(f"- Status: {stat.status}")
             
             if stat.response_time:
-                report.append(f"- 响应时间: {stat.response_time:.2f}秒")
+                report.append(f"- Response Time: {stat.response_time:.2f} seconds")
             
             if stat.error_message:
-                report.append(f"- 错误信息: {stat.error_message}")
+                report.append(f"- Error Message: {stat.error_message}")
             
             report.append("")
             
@@ -473,22 +582,22 @@ class StatsCrawler:
                 total_servers += stat.server_count
                 successful_sites += 1
         
-        report.append("## 汇总")
-        report.append(f"- 成功爬取的网站: {successful_sites}/{len(stats)}")
-        report.append(f"- 总服务器数量: {total_servers}")
+        report.append("## Summary")
+        report.append(f"- Successfully crawled websites: {successful_sites}/{len(stats)}")
+        report.append(f"- Total server count: {total_servers}")
         report.append("")
         
         return "\n".join(report)
     
     async def run(self):
-        """运行统计爬虫"""
-        logger.info("开始爬取MCP服务器数量统计...")
+        """Run statistics crawler"""
+        logger.info("Start crawling MCP server count statistics...")
         
         try:
             stats = await self.crawl_all_sites()
             self.save_stats(stats)
             
-            # 生成报告
+            # Generate statistics report
             report = self.generate_report(stats)
             output_dir = Path(self.config['output_dir'])
             report_file = output_dir / f"report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
@@ -496,13 +605,13 @@ class StatsCrawler:
             with open(report_file, 'w', encoding='utf-8') as f:
                 f.write(report)
             
-            logger.info(f"统计报告已生成: {report_file}")
-            logger.info("MCP服务器数量统计完成")
+            logger.info(f"Statistics report generated: {report_file}")
+            logger.info("MCP server count statistics crawl completed")
             
             return stats
             
         except Exception as e:
-            logger.error(f"统计爬虫运行失败: {e}")
+            logger.error(f"Statistics crawler run failed: {e}")
             raise
         finally:
             if self.session and not self.session.closed:
@@ -510,7 +619,7 @@ class StatsCrawler:
 
 
 async def main():
-    """主函数"""
+    """Main function"""
     crawler = StatsCrawler()
     await crawler.run()
 
@@ -518,4 +627,4 @@ async def main():
 if __name__ == "__main__":
     import logging
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(main()) 
+    asyncio.run(main())

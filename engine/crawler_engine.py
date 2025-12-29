@@ -10,6 +10,7 @@ from .cursor_crawler import CursorCrawler
 from .glama_crawler import GlamaCrawler
 from .glama_client_crawler import GlamaClientCrawler
 from .source_downloader import SourceDownloader
+from .category_crawler import CategoryCrawler
 
 import argparse
 import yaml
@@ -22,9 +23,10 @@ def main():
     parser.add_argument('--download-sources', action='store_true', help='Download server source code after crawling metadata')
     parser.add_argument('--download-only', action='store_true', help='Only download source code from existing metadata files')
     parser.add_argument('--download-source', type=str, help='Download source code for specific data source')
+    parser.add_argument('--categories-only', action='store_true', help='Only crawl categories for existing data sources')
+    parser.add_argument('--categories-source', type=str, help='Crawl categories for specific data source')
     args = parser.parse_args()
 
-    # 如果只是下载源码
     if args.download_only or args.download_source:
         downloader = SourceDownloader()
         if args.download_source:
@@ -32,14 +34,40 @@ def main():
         else:
             downloader.download_all_sources()
         return
+    
+    if args.categories_only or args.categories_source:
+        category_crawler = CategoryCrawler(Path("."))
+        if args.categories_source:
+            # crawl categories for specific data source
+            if args.categories_source == 'smithery':
+                category_crawler.crawl_smithery_categories()
+            elif args.categories_source == 'pulse':
+                category_crawler.crawl_pulse_categories()
+            elif args.categories_source == 'cursor':
+                category_crawler.crawl_cursor_categories()
+            elif args.categories_source == 'awesome':
+                category_crawler.crawl_awesome_categories()
+            elif args.categories_source == 'glama':
+                category_crawler.crawl_glama_categories()
+            else:
+                print(f"Error: Unknown data source for categories: {args.categories_source}")
+                return
+        else:
+            # crawl categories for all data sources
+            category_crawler.crawl_smithery_categories()
+            category_crawler.crawl_pulse_categories()
+            category_crawler.crawl_cursor_categories()
+            category_crawler.crawl_awesome_categories()
+            category_crawler.crawl_glama_categories()
+        return
 
-    # 加载配置
+    # load config
     with open(args.config, 'r') as f:
         config = yaml.safe_load(f)
 
-    # 获取所有可用的爬虫类
+    # Get available crawler classes
     crawler_classes = {
-        # Server爬虫
+        # Server crawler
         'smithery': SmitheryCrawler,
         'modelcontextprotocol': DistributedCrawler,
         'pulse': PulseCrawler,
@@ -47,56 +75,56 @@ def main():
         'awesome': AwesomeMcpCrawler,
         'glama': GlamaCrawler,
         
-        # Client爬虫
+        # Client crawler
         'glama_clients': GlamaClientCrawler,
     }
 
-    # 根据类型过滤数据源
+    # filter data sources based on type
     if args.type == 'servers':
-        # 只运行server爬虫
+        # run server crawlers
         sources_to_crawl = [source for source in (args.sources or list(crawler_classes.keys())) 
                            if source not in ['glama_clients']]
     elif args.type == 'clients':
-        # 只运行client爬虫
+        # run client crawlers
         sources_to_crawl = [source for source in (args.sources or list(crawler_classes.keys())) 
                            if source in ['glama_clients']]
     else:
-        # 运行所有爬虫
+        # run all crawlers
         sources_to_crawl = args.sources if args.sources else list(crawler_classes.keys())
 
-    # 验证指定的数据源是否有效
+    # verify specified data sources
     invalid_sources = [source for source in sources_to_crawl if source not in crawler_classes]
     if invalid_sources:
         print(f"Error: Invalid data sources specified: {', '.join(invalid_sources)}")
         print(f"Available data sources: {', '.join(crawler_classes.keys())}")
         return
 
-    # 创建输出目录
+    # create output directory
     if args.type == 'clients':
         output_dir = Path("mcp_clients")
     else:
         output_dir = Path("mcp_servers")
     output_dir.mkdir(exist_ok=True)
 
-    # 保存配置信息
+    # save config info
     with open(output_dir / "config.json", "w") as f:
         json.dump(config, f, indent=2)
 
-    # 创建爬虫实例并运行
+    # create crawler instances and run
     for source in sources_to_crawl:
-        print(f"\n开始抓取 {source} 数据源...")
+        print(f"\nStart crawling {source} data source...")
         crawler_class = crawler_classes[source]
         crawler = crawler_class(args.config)
         asyncio.run(crawler.run())
-        print(f"完成抓取 {source} 数据源")
+        print(f"Finish crawling {source} data source")
 
-    # 如果需要下载源码
+    # if download sources is specified and type is not clients
     if args.download_sources and args.type != 'clients':
-        print(f"\n开始下载server源码...")
+        print(f"\nStart downloading server source code...")
         downloader = SourceDownloader()
         for source in sources_to_crawl:
             if source in ['smithery', 'pulse', 'cursor', 'awesome', 'glama', 'modelcontextprotocol']:
-                print(f"\n下载 {source} 数据源的源码...")
+                print(f"\nDownload source code for {source} data source...")
                 downloader.download_sources_for_data_source(source)
 
 if __name__ == "__main__":

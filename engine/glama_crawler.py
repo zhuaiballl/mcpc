@@ -15,6 +15,7 @@ import time
 import requests_cache
 import random
 from datetime import datetime
+import logging
 
 # GitHub API proxy settings
 github_proxies = {
@@ -31,11 +32,13 @@ class GlamaCrawler:
         self.github_token = os.getenv('GITHUB_TOKEN')
         self.base_url = "https://glama.ai"
         self.chromedriver_path = os.getenv('CHROMEDRIVER_PATH', '/usr/local/bin/chromedriver')
+        self.logger = logging.getLogger(__name__)
+        self.logger.setLevel(logging.DEBUG)
 
     def _get_driver(self):
-        """获取 Chrome WebDriver 实例"""
+        """Get Chrome WebDriver Instance"""
         chrome_options = Options()
-        chrome_options.add_argument('--headless')  # 无头模式
+        chrome_options.add_argument('--headless')  # headless mode
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
@@ -62,7 +65,7 @@ class GlamaCrawler:
             raise
 
     def _random_sleep(self, min_seconds=2, max_seconds=5):
-        """随机等待一段时间，模拟人类行为"""
+        """Randomly wait for a period of time to simulate human behavior"""
         time.sleep(random.uniform(min_seconds, max_seconds))
 
     def _scroll_to_bottom(self, driver, pause_time=2):
@@ -129,12 +132,12 @@ class GlamaCrawler:
         driver = self._get_driver()
         try:
             driver.get(detail_url)
-            self._random_sleep(3, 6)  # 随机等待更长时间
+            self._random_sleep(3, 6)  # Random wait longer time
             
-            # 尝试多种方式查找 GitHub 链接
+            # Try multiple methods to find GitHub link
             github_url = None
             
-            # 方法1: 使用 XPath 查找包含 "github.com" 的链接
+            # Method 1: XPath search for links containing "github.com"
             try:
                 github_links = driver.find_elements(By.XPATH, "//a[contains(@href, 'github.com')]")
                 if github_links:
@@ -147,7 +150,7 @@ class GlamaCrawler:
             except Exception as e:
                 print(f"XPath search failed: {str(e)}")
             
-            # 方法2: 使用 CSS 选择器
+            # Method 2: CSS selector search
             if not github_url:
                 try:
                     github_links = driver.find_elements(By.CSS_SELECTOR, 'a[href*="github.com"]')
@@ -159,11 +162,11 @@ class GlamaCrawler:
                 except Exception as e:
                     print(f"CSS selector search failed: {str(e)}")
             
-            # 方法3: 使用页面源码
+            # Method 3: Search in page source
             if not github_url:
                 try:
                     page_source = driver.page_source
-                    # 使用更严格的正则表达式匹配仓库URL
+                    # Use stricter regex to match repo URLs
                     github_pattern = r'https?://github\.com/[^/]+/[^/"\']+/?'
                     matches = re.findall(github_pattern, page_source)
                     for url in matches:
@@ -199,12 +202,12 @@ class GlamaCrawler:
 
     def _download_github_repo(self, repo_url, server_dir):
         if not self.github_token:
-            print("未设置 GITHUB_TOKEN，无法抓取 GitHub repo")
+            print("GITHUB_TOKEN not set, cannot fetch GitHub repo")
             return
             
         owner, repo = self.extract_github_repo_info(repo_url)
         if not owner or not repo:
-            print(f"链接不是有效的GitHub仓库链接，已跳过: {repo_url}")
+            print(f"Link is not a valid GitHub repo link, skipped: {repo_url}")
             return
             
         api_url = f'https://api.github.com/repos/{owner}/{repo}/contents'
@@ -233,85 +236,141 @@ class GlamaCrawler:
         os.makedirs(server_dir, exist_ok=True)
         try:
             download_dir(api_url, str(server_dir))
-            print(f"已抓取 GitHub repo: {repo_url} 到 {server_dir}")
+            print(f"Successfully fetched GitHub repo: {repo_url} to {server_dir}")
         except Exception as e:
-            print(f"抓取 GitHub repo {repo_url} 失败: {e}")
+            print(f"Failed to fetch GitHub repo {repo_url}: {e}")
 
     def _load_all_items(self, driver):
-        """点击 Load More 按钮直到加载所有项目"""
+        """Click Load More button until all items are loaded"""
         while True:
             try:
-                # 等待 Load More 按钮出现
+                # Wait for Load More button to appear
                 load_more = WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located((By.XPATH, "//button[contains(text(), 'Load More')]"))
                 )
                 
-                # 检查按钮是否可见和可点击
+                # Check if button is visible and clickable
                 if not load_more.is_displayed() or not load_more.is_enabled():
-                    print("Load More 按钮不可见或不可点击，可能已加载所有项目")
+                    print("Load More button is not visible or clickable, may have loaded all items")
                     break
                 
-                # 滚动到按钮位置
+                # Scroll to button position
                 driver.execute_script("arguments[0].scrollIntoView(true);", load_more)
-                self._random_sleep(1, 2)  # 短暂等待以确保按钮完全可见
+                self._random_sleep(1, 2)  # Short wait to ensure button is fully visible
                 
-                # 点击按钮
+                # Click the button
                 load_more.click()
-                print("点击了 Load More 按钮")
+                print("Clicked Load More button")
                 
-                # 等待新内容加载
+                # Wait for new content to load  
                 self._random_sleep(2, 3)
                 
-                # 检查是否还有更多内容可以加载
+                # Check if there are more items to load
                 try:
-                    # 如果按钮不再可见或可点击，说明已加载所有内容
+                    # If button is not visible or clickable, all items are loaded
                     if not load_more.is_displayed() or not load_more.is_enabled():
-                        print("已加载所有项目")
+                        print("All items have been loaded")
                         break
                 except:
-                    # 如果按钮不再存在，说明已加载所有内容
-                    print("Load More 按钮不再存在，已加载所有项目")
+                    # If button is not found, all items are loaded
+                    print("Load More button is not found, all items have been loaded")
                     break
                     
             except Exception as e:
-                print(f"加载更多项目时发生错误: {str(e)}")
+                print(f"Error loading more items: {str(e)}")
                 break
+
+    def _api_request(self, endpoint, params=None):
+        """Basic API request method"""
+        url = f"https://glama.ai/api/mcp/v1/{endpoint}"
+        headers = {"Accept": "application/json"}
+        try:
+            response = requests.get(url, headers=headers, params=params, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            self.logger.error(f"API request failed: {e}")
+            return None
+    
+    def fetch_all_servers(self):
+        all_servers = []
+        params = {"first": 100}
+        after = None
+        max_retries = 3
+        while True:
+            retry_count = 0
+            while retry_count < max_retries:
+                try:
+                    if after:
+                        params["after"] = after
+                    else:
+                        params.pop("after", None)
+                    data = self._api_request("servers", params)
+                    print(f"API response: pageInfo={data.get('pageInfo') if data else None}, servers_count={len(data['servers']) if data and 'servers' in data else 0}")
+                    if not data or "servers" not in data or "pageInfo" not in data:
+                        self.logger.error("API response data is incomplete")
+                        raise Exception("API response data is incomplete")
+
+                    # Handle field renaming
+                    for server in data["servers"]:
+                        if "repository" in server and server["repository"] and "url" in server["repository"]:
+                            server["github_url"] = server["repository"]["url"]
+                            del server["repository"]
+
+                    all_servers.extend(data["servers"])
+
+                    self.logger.info(f"Current page records: {len(data['servers'])}, total records: {len(all_servers)}, has next page: {data['pageInfo']['hasNextPage']}")
+
+                    if not data["pageInfo"]["hasNextPage"]:
+                        return all_servers
+
+                    after = data["pageInfo"]["endCursor"]
+                    time.sleep(random.uniform(1.5, 3.0))
+                    break  # Current page successfully processed, break retry loop
+                except Exception as e:
+                    retry_count += 1
+                    self.logger.error(f"API request failed (retry {retry_count}/{max_retries}): {str(e)}")
+                    time.sleep(retry_count * 3)
+            if retry_count == max_retries:
+                self.logger.error("Continuous multiple API request failures, stopping crawl.")
+                break
+        return all_servers
 
     def crawl(self):
         url = 'https://glama.ai/mcp/servers'
         driver = self._get_driver()
         try:
             driver.get(url)
-            self._random_sleep(3, 6)  # 随机等待更长时间
+            self._random_sleep(3, 6)  # Random wait longer time
             
-            # 加载所有项目
+            # Load all items    
             self._load_all_items(driver)
             
-            # 滚动到底部以确保所有内容都已加载
+            # Scroll to bottom to ensure all content is loaded  
             self._scroll_to_bottom(driver)
             
             html = driver.page_source
             results = self._parse_list(html)
-            print(f"共抓取到 {len(results)} 条 Glama MCP 数据")
+            print(f"Total Glama MCP servers found: {len(results)}")
 
-            # 处理每个server，获取GitHub repo信息
+            # Process each server, get GitHub repo information
             for item in results:
-                # 获取并添加GitHub repo信息
+                # Get and add GitHub repo information
                 repo_url = self._get_github_repo_url(item['detail_url'])
                 if repo_url:
                     item['github_url'] = repo_url
-                    print(f"找到 {item['name']} 的 GitHub repo: {repo_url}")
+                    print(f"Found GitHub repo for {item['name']}: {repo_url}")
                 else:
                     item['github_url'] = ''
-                    print(f"未找到 {item['name']} 的 GitHub repo 链接")
+                    print(f"Did not find GitHub repo for {item['name']}")
                 
-                # 添加source和crawled_at字段
+                # Add source and crawled_at fields
                 item['source'] = 'glama'
                 item['crawled_at'] = datetime.now().isoformat()
                 
-                self._random_sleep(2, 4)  # 在请求之间添加随机延迟
+                self._random_sleep(2, 4)  # Random delay between requests
 
-            # 保存汇总文件
+            # Save summary file
             summary_path = self.output_dir / "glama.json"
             with open(summary_path, 'w') as f:
                 json.dump({
@@ -320,9 +379,9 @@ class GlamaCrawler:
                     'crawled_at': datetime.now().isoformat(),
                     'servers': results
                 }, f, indent=2, ensure_ascii=False)
-            print(f"Glama MCP 数据已保存至 {summary_path.resolve()}")
+            print(f"Glama MCP servers data saved to {summary_path.resolve()}")
         finally:
             driver.quit()
 
     async def run(self):
-        self.crawl() 
+        self.crawl()
