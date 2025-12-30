@@ -28,11 +28,12 @@ sites:
 
   - name: "mcp_so"
     url: "https://mcp.so/"
-    count_selector: "body > main > div > section.px-4.md\\:px-8.py-16 > div > div > a > div"
+    count_selector: "body > div > main > div.flex-1.px-4.md\\:px-6.pb-16.pt-4 > section.px-4.md\\:px-8.py-4 > div > div > p > span"
     fallback_selectors:
-      - "section.px-4.md\\:px-8.py-16 a div"
-      - "a div"
-      - "div"
+      - "section.px-4.md\\:px-8.py-4 > div > div > p > span"
+      - "section.px-4.md\\:px-8.py-4 p span"
+      - "section p span"
+      - "p > span"
     timeout: 45
     headers:
       User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
@@ -59,22 +60,24 @@ sites:
       User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 
   - name: "smithery"
-    url: "https://smithery.ai/"
-    count_selector: "body > main > div.relative.px-4.sm\\:px-6.lg\\:px-8.pt-20 > div > p"
-    fallback_selectors:
-      - "main div p"
-      - "p"
-    timeout: 30
+    url: "https://smithery.ai/servers"
+    type: "smithery_pagination_count"
+    last_page_selector: "body > div.flex.min-h-screen.flex-col > div.flex-1 > main > div > div > div.flex-1.min-w-0 > div.mt-4 > div > nav > ul > a:nth-child(6)"
+    server_list_selector: "body > div.flex.min-h-screen.flex-col > div.flex-1 > main > div > div > div.flex-1.min-w-0 > div.mt-4 > div > div"
+    items_per_page: 21
+    timeout: 60
     headers:
       User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
 
   - name: "awesome_mcp_servers"
-    url: "https://mcpservers.org/"
-    count_selector: "body > div.container.mx-auto.px-4.py-8 > div.max-w-screen-2xl.mx-auto > div.mb-4.text-left.text-sm.text-gray-600"
+    url: "https://mcpservers.org/all"
+    count_selector: "body > main > div > div.max-w-screen-2xl.mx-auto > div.mb-6.flex.justify-between.items-center > div:nth-child(1) > div"
     fallback_selectors:
-      - ".text-gray-600"
-      - ".text-sm"
-      - "div.text-left"
+      - "div.max-w-screen-2xl.mx-auto > div.mb-6.flex.justify-between.items-center > div:nth-child(1) > div"
+      - "div.max-w-screen-2xl > div.mb-6 > div:nth-child(1) > div"
+      - "div.max-w-screen-2xl > div.mb-6 > div:first-child > div"
+      - "div.max-w-screen-2xl > div.mb-6 > div > div"
+      - "div.max-w-screen-2xl > div.mb-6 > div"
     timeout: 30
     headers:
       User-Agent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" 

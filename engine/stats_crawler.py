@@ -223,9 +223,6 @@ class StatsCrawler:
                 response_time=time.time() - start_time
             )
 
-    # Add after the _selenium_text method
-    
-    # Add pagination count method after the _selenium_text method
     def _selenium_pagination_count(self, site_config):
         """Count total servers using pagination"""
         start_time = time.time()
@@ -327,7 +324,86 @@ class StatsCrawler:
             response_time=time.time() - start_time
         )
     
-
+    def _selenium_smithery_pagination_count(self, site_config):
+        """Count total servers for smithery.ai using pagination info"""
+        start_time = time.time()
+        chrome_options = Options()
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        driver = webdriver.Chrome(options=chrome_options)
+        driver.set_page_load_timeout(site_config.get('timeout', 60))
+        
+        total_count = 0
+        items_per_page = site_config.get('items_per_page', 21)
+        
+        try:
+            # Visit the first page
+            logger.info(f"Visiting smithery first page: {site_config['url']}")
+            driver.get(site_config['url'])
+            time.sleep(2)  # Wait for page to load
+            
+            # Find the last page link
+            last_page_selector = site_config.get('last_page_selector')
+            if not last_page_selector:
+                raise ValueError("last_page_selector is required for smithery pagination")
+            
+            try:
+                last_page_link = driver.find_element(By.CSS_SELECTOR, last_page_selector)
+                last_page_text = last_page_link.text.strip()
+                logger.info(f"Found last page link text: {last_page_text}")
+                
+                # Extract page number from the link text
+                import re
+                page_numbers = re.findall(r'\d+', last_page_text)
+                if not page_numbers:
+                    raise ValueError(f"Could not extract page number from: {last_page_text}")
+                
+                total_pages = int(page_numbers[0])
+                logger.info(f"Total pages: {total_pages}")
+                
+                # Get the last page URL
+                last_page_url = last_page_link.get_attribute('href')
+                logger.info(f"Last page URL: {last_page_url}")
+                
+                # Visit the last page
+                logger.info("Visiting last page to count servers...")
+                driver.get(last_page_url)
+                time.sleep(2)  # Wait for page to load
+                
+                # Count servers on the last page
+                server_list_selector = site_config.get('server_list_selector')
+                if not server_list_selector:
+                    raise ValueError("server_list_selector is required for smithery pagination")
+                
+                server_elements = driver.find_elements(By.CSS_SELECTOR, server_list_selector)
+                last_page_count = len(server_elements)
+                logger.info(f"Last page server count: {last_page_count}")
+                
+                # Calculate total count: (total_pages - 1) * items_per_page + last_page_count
+                total_count = (total_pages - 1) * items_per_page + last_page_count
+                logger.info(f"Total server count calculated: ({total_pages} - 1) * {items_per_page} + {last_page_count} = {total_count}")
+                
+            except Exception as e:
+                logger.error(f"Failed to extract pagination info: {e}")
+                raise
+                
+        except Exception as e:
+            logger.error(f"Error occurred during smithery pagination crawl: {e}")
+            total_count = 0
+        finally:
+            driver.quit()
+        
+        return SiteStats(
+            site_name=site_config['name'],
+            url=site_config['url'],
+            server_count=total_count,
+            crawled_at=datetime.now().isoformat(),
+            status="success" if total_count > 0 else "error",
+            error_message="Failed to extract server count through pagination" if total_count == 0 else None,
+            response_time=time.time() - start_time
+        )
+    
     async def crawl_site_stats(self, site_config: Dict[str, Any]) -> SiteStats:
         """Crawl statistics for a single website"""
         start_time = time.time()
@@ -351,6 +427,10 @@ class StatsCrawler:
                 if site_config.get('type') == 'selenium_pagination_count':
                     loop = asyncio.get_event_loop()
                     return await loop.run_in_executor(None, self._selenium_pagination_count, site_config)
+                # smithery smithery_pagination_count
+                if site_config.get('type') == 'smithery_pagination_count':
+                    loop = asyncio.get_event_loop()
+                    return await loop.run_in_executor(None, self._selenium_smithery_pagination_count, site_config)
                 
                 # Handle Cloudflare protected websites
                 if site_config.get('cloudflare_protected', False):
