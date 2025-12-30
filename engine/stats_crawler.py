@@ -363,7 +363,8 @@ class StatsCrawler:
                 logger.info(f"Total pages: {total_pages}")
                 
                 # Get the last page URL
-                last_page_url = last_page_link.get_attribute('href')
+                # given href is wrong, use the last page number in the url
+                last_page_url = site_config.get('url')+"?page="+str(total_pages)
                 logger.info(f"Last page URL: {last_page_url}")
                 
                 # Visit the last page

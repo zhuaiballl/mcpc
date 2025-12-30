@@ -63,7 +63,7 @@ sites:
     url: "https://smithery.ai/servers"
     type: "smithery_pagination_count"
     last_page_selector: "body > div.flex.min-h-screen.flex-col > div.flex-1 > main > div > div > div.flex-1.min-w-0 > div.mt-4 > div > nav > ul > a:nth-child(6)"
-    server_list_selector: "body > div.flex.min-h-screen.flex-col > div.flex-1 > main > div > div > div.flex-1.min-w-0 > div.mt-4 > div > div"
+    server_list_selector: "body > div.flex.min-h-screen.flex-col > div.flex-1 > main > div > div > div.flex-1.min-w-0 > div.mt-4 > div > div > a"
     items_per_page: 21
     timeout: 60
     headers:
